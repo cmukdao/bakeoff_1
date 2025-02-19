@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Bakeoff 1</title>
+		<style type="text/css">
+		/*		This CSS is not required, but recommended.	*/
+			body {
+				height: 100vh;
+				width: 100vw;
+				border: none;
+				margin: 0px;
+				text-align: center;
+				display: flex;
+			    align-items: center;
+			    justify-content: center;
+			}
+			body.active {
+				border-left: 3px #f06 solid;
+			}
+			footer {
+				width: 100vw;
+				text-align: center;
+				position: absolute;
+				bottom: 0px;
+				padding: 0.75em;
+				border-top: 1px #ddd solid;
+			}
+			svg {
+				border: 1px #ddd solid;
+			}
+		</style>
+		<!-- The following script (svg.js) is not required, but recommended. -->
+		<script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>
+		<!-- The following script (bakeoff framework) *is* required. -->
+		<script src="https://dhcs-s25-bakeoff1.glitch.me/framework.js"></script>
+	</head>
+	<body>
+		<div id="main"></div>
+	</body>
+	<script type="text/javascript">
+		// This constant can be changed while you are experimenting, but it should be set back to 10 for the Bakeoff:
+		const tasksLength = 10;
+
+		// Other constants for sizing and testing:
+		// numberOfSquaresWide, numberOfSquaresTall, margin, padding, buttonSize, canvasSize
+		// ...are all defined in the framework file, because you shouldn't change them.
+
+
+		// The framework requires a list of "targets" should be references to the elements corresponding to the squares. The elements have to be something that can have an eventListener attached. 
+		// The list can either be a 1D array (e.g. [svgElement, svgElement, svgElement etc]) 
+		// or an object, e.g. {1: svgElement, 2: svgElement, 3: svgElement etc})
+		let targets = [];
+
+
+		// This part shows how to set up clickable squares as svg elements. This is recommended, but you can use buttons/divs or canvases instead if you prefer, as long as the dimensions/positions are the same as this spec. 
+		// This code uses the svg.js library; documentation at: https://svgjs.dev/docs/3.0/
+
+		// Create an svg div that is the specified size, in the div with ID "main". (Centering it on the page is handled by CSS.)
+		let svg = SVG().addTo('#main').size(canvasSize, canvasSize);
+
+		// Initialize the squares.
+		for (let i=0; i<numberOfSquaresTall*numberOfSquaresWide; i++) {
+			// Calculate where this square should be:
+			let x = (i % numberOfSquaresWide) * (padding + buttonSize) + margin;
+			let y = Math.floor(i / numberOfSquaresTall) * (padding + buttonSize) + margin;
+
+			// In svg.js, we make rectangles at whatever size we want
+			let square = svg.rect(buttonSize, buttonSize);
+			// ...and then we move them to where we want them. (This is different from Processing, where we make them "in the right place" to start with.)
+			square.move(x, y);
+			// and we can change the element's color:
+			square.fill("#333");
+			// (see the svg.js documentation for more information on colors, fill vs stroke, etc)
+
+			// And then we add this new square to the list of squares.
+			targets[i] = square;
+		}
+
+
+		// =========== This part is required: =========== 
+		// Initialize the "judge" object with the number of tasks per trial, and the list of clickable targets.
+		const judge = new Judge(tasksLength, targets, "teamName");
+		// =========== /end required =========== 
+
+
+		// When the next task is available, fetch it.
+		// A "task" is simply the index of the next square that should be clicked.
+		judge.on("newTask", () => {
+			let nextTasks = judge.getNextTwoTasks();
+			// getNextTwoTasks() will get you the next two, as an array of length 2.
+			// Note that it's possible that one or both elements will be "undefined" (e.g. if there are no more tasks, or only one more).
+			console.log("The next square you should click is "+nextTasks[0]);
+		})
+
+		// Other available events you can assign handlers to:
+		// 		correctSquare: when the correct square is clicked
+		// 		wrongSquare: when the wrong square is clicked
+		// 		newTask: when a new task (the next square to click) is assigned
+		// 		testOver: when all tasks have been fulfilled
+		// 		reset: whenever judge.reset() is called
+		// 		start: whenever the start button is pressed
+		// 		stop: whenever the stop button is pressed
+
+		//  =========== !!! FOR EXAMPLE !!! =========== 
+		// Note that this version *overwrites* the "on" handler above at line 89.
+		judge.on("newTask", () => {
+			// get the next task
+			let nextSquareIndex = judge.getNextTwoTasks()[0];
+
+			// reset all the squares to grey
+			for (let i=0; i<numberOfSquaresTall*numberOfSquaresWide; i++) {
+				targets[i].fill("#333")
+			}
+
+			// if there is indeed a next task (not "undefined")
+			if (typeof nextSquareIndex !== "undefined") {
+				console.log("Next: "+nextSquareIndex);
+				// fill it with hot pink
+				targets[nextSquareIndex].fill("#f06");
+			}
+		})
+		
+	</script>
+</html>
