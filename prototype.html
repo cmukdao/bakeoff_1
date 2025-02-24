@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Bakeoff 1</title>
+    <style type="text/css">
+      /* Basic page styling */
+      body {
+        height: 100vh;
+        width: 100vw;
+        margin: 0;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      body.active {
+        border-left: 3px #f06 solid;
+      }
+      footer {
+        width: 100vw;
+        text-align: center;
+        position: absolute;
+        bottom: 0;
+        padding: 0.75em;
+        border-top: 1px #ddd solid;
+      }
+      svg {
+        border: 1px #ddd solid;
+      }
+      /* Header area: displays timer and final score */
+      #header {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+      }
+      #timer, #finalScore {
+        font-size: 24px;
+        margin-top: 5px;
+      }
+    </style>
+    <!-- Recommended: svg.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>
+    <!-- Required: bakeoff framework -->
+    <script src="https://dhcs-s25-bakeoff1.glitch.me/framework.js"></script>
+  </head>
+  <body>
+    <div id="header">
+      <div id="timer">Time: 0.00 s</div>
+      <div id="finalScore">Score:</div>
+    </div>
+    <div id="main"></div>
+  <script type="text/javascript">
+    /* --- Global game variables --- */
+    const tasksLength = 10;
+    let targets = [];
+    let isGameRunning = false;
+    let misClicks = 0;
+    let timerInterval;
+    let startTime;
+    let activeSquare = null;
+    let lastSquare = null;
+    let connectingLine = null;
+
+    /* --- Create the SVG canvas --- */
+    let svg = SVG().addTo('#main').size(canvasSize, canvasSize);
+
+    /* --- Initialize squares --- */
+    for (let i = 0; i < numberOfSquaresTall * numberOfSquaresWide; i++) {
+      // Calculate x,y based on the framework constants.
+      let x = (i % numberOfSquaresWide) * (padding + buttonSize) + margin;
+      let y = Math.floor(i / numberOfSquaresTall) * (padding + buttonSize) + margin;
+      let square = svg.rect(buttonSize, buttonSize);
+      square.move(x, y);
+      // Default color is grey.
+      square.fill("#333");
+      targets[i] = square;
+    }
+
+    /* --- Initialize the Judge (framework) --- */
+    const judge = new Judge(tasksLength, targets, "teamName");
+
+    const timerDiv = document.getElementById("timer");
+    const finalScoreDiv = document.getElementById("finalScore");
+
+    // When the game starts.
+    judge.on("start", () => {
+      isGameRunning = true;
+      misClicks = 0; // reset mis-click counter
+      startTime = Date.now();
+      // Update timer every 50 ms with seconds and milliseconds.
+      timerInterval = setInterval(() => {
+        let elapsed = Date.now() - startTime;
+        let seconds = (elapsed / 1000).toFixed(2);
+        timerDiv.innerText = "Time: " + seconds + " s";
+      }, 50);
+    });
+
+    /* --- Event: reset --- 
+         Called when a new game starts via the start button.
+         We reset game state and then manually trigger the first task. */
+    judge.on("reset", () => {
+      // Clear any running timer.
+      if (timerInterval) clearInterval(timerInterval);
+      isGameRunning = true;
+      misClicks = 0;
+      startTime = Date.now();
+      timerDiv.innerText = "Time: 0.00 s";
+      finalScoreDiv.innerText = "Score:";
+      // Reset all squares to grey.
+      targets.forEach(sq => sq.fill("#333"));
+      // Remove any connecting line.
+      if (connectingLine) {
+        connectingLine.remove();
+        connectingLine = null;
+      }
+      // No previous target exists for the first task.
+      lastSquare = null;
+      activeSquare = null;
+      // Trigger the first target.
+      if (judge.events["newTask"]) {
+        judge.events["newTask"]();
+      }
+    });
+
+    /* --- Event: newTask ---
+         When a new target is assigned, we highlight it and, if applicable,
+         draw a connecting line from the previous target.
+         (If the game has been stopped, do nothing.) */
+    judge.on("newTask", () => {
+      if (!isGameRunning) return;
+      // Remove any existing connecting line to ensure only one exists.
+      if (connectingLine) {
+        connectingLine.remove();
+        connectingLine = null;
+      }
+      // Obtain the next target index.
+      let nextSquareIndex = judge.getNextTwoTasks()[0];
+      // Reset all squares to grey.
+      targets.forEach(sq => sq.fill("#333"));
+      if (typeof nextSquareIndex !== "undefined") {
+        // If there is a previous target, draw a line from its center to the new target.
+        if (lastSquare) {
+          let oldBox = lastSquare.bbox();
+          let newBox = targets[nextSquareIndex].bbox();
+          connectingLine = svg.line(oldBox.cx, oldBox.cy, newBox.cx, newBox.cy)
+                              .stroke({ color: '#1F51FF', width: 6 })
+                              .attr({ "pointer-events": "none" });
+        }
+        // Mark the new target (active square) in hot pink.
+        activeSquare = targets[nextSquareIndex];
+        activeSquare.fill("#f06");
+        // Update lastSquare so that subsequent targets will connect from here.
+        lastSquare = activeSquare;
+      }
+    });
+
+    /* --- Event: correctSquare ---
+         When the correct (active) square is clicked, remove any connecting line
+         and reset that square's color.
+         (The framework will then trigger newTask if there are remaining tasks.) */
+    judge.on("correctSquare", () => {
+      if (connectingLine) {
+        connectingLine.remove();
+        connectingLine = null;
+      }
+      if (activeSquare) {
+        activeSquare.fill("#333");
+      }
+    });
+
+    /* --- Event: wrongSquare ---
+         Increment our mis-click counter when a wrong square is clicked. */
+    judge.on("wrongSquare", () => {
+      misClicks++;
+    });
+
+    /* --- Event: stop ---
+         When the game stops, if it is running, stop the timer and calculate the score.
+         Further stop presses or newTask events will have no effect. */
+    judge.on("stop", () => {
+      if (!isGameRunning) return;
+      isGameRunning = false;
+      clearInterval(timerInterval);
+      let elapsed = Date.now() - startTime;
+      let seconds = elapsed / 1000;
+      let finalScore = seconds * (1 + (0.1 * misClicks));
+      finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+    });
+
+    /* --- Event: testOver ---
+         When all tasks are complete, stop the game and compute the final score.
+         (Same as stop.) */
+    judge.on("testOver", () => {
+      if (!isGameRunning) return;
+      isGameRunning = false;
+      clearInterval(timerInterval);
+      let elapsed = Date.now() - startTime;
+      let seconds = elapsed / 1000;
+      let finalScore = seconds * (1 + (0.1 * misClicks));
+      finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+    });
+  </script>
+  </body>
+</html>

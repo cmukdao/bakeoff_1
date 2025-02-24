@@ -1,125 +1,163 @@
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8">
-		<title>Bakeoff 1</title>
-		<style type="text/css">
-		/*		This CSS is not required, but recommended.	*/
-			body {
-				height: 100vh;
-				width: 100vw;
-				border: none;
-				margin: 0px;
-				text-align: center;
-				display: flex;
-			    align-items: center;
-			    justify-content: center;
-			}
-			body.active {
-				border-left: 3px #f06 solid;
-			}
-			footer {
-				width: 100vw;
-				text-align: center;
-				position: absolute;
-				bottom: 0px;
-				padding: 0.75em;
-				border-top: 1px #ddd solid;
-			}
-			svg {
-				border: 1px #ddd solid;
-			}
-		</style>
-		<!-- The following script (svg.js) is not required, but recommended. -->
-		<script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>
-		<!-- The following script (bakeoff framework) *is* required. -->
-		<script src="https://dhcs-s25-bakeoff1.glitch.me/framework.js"></script>
-	</head>
-	<body>
-		<div id="main"></div>
-	</body>
-	<script type="text/javascript">
-		// This constant can be changed while you are experimenting, but it should be set back to 10 for the Bakeoff:
-		const tasksLength = 10;
+  <head>
+    <meta charset="utf-8">
+    <title>Bakeoff 1</title>
+    <style type="text/css">
+      /* Basic page styling */
+      body {
+        height: 100vh;
+        width: 100vw;
+        margin: 0;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      body.active {
+        border-left: 3px #f06 solid;
+      }
+      footer {
+        width: 100vw;
+        text-align: center;
+        position: absolute;
+        bottom: 0;
+        padding: 0.75em;
+        border-top: 1px #ddd solid;
+      }
+      svg {
+        border: 1px #ddd solid;
+      }
+      /* Header area: displays team name, timer, and final score */
+      #header {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+      }
+      #timer, #finalScore {
+        font-size: 24px;
+        margin-top: 5px;
+      }
+    </style>
+    <!-- Recommended: svg.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>
+    <!-- Required: bakeoff framework -->
+    <script src="https://dhcs-s25-bakeoff1.glitch.me/framework.js"></script>
+  </head>
+  <body>
+    <div id="header">
+      <div id="timer">Time: 0.00 s</div>
+      <div id="finalScore">Score:</div>
+    </div>
+    <div id="main"></div>
+  <script type="text/javascript">
+    // This constant can be changed while you are experimenting,
+    // but it should be set back to 10 for the Bakeoff.
+    const tasksLength = 10;
 
-		// Other constants for sizing and testing:
-		// numberOfSquaresWide, numberOfSquaresTall, margin, padding, buttonSize, canvasSize
-		// ...are all defined in the framework file, because you shouldn't change them.
+    // Other constants (numberOfSquaresWide, numberOfSquaresTall, margin,
+    // padding, buttonSize, canvasSize) are defined in the framework file.
 
+    // The framework requires a list of "targets" for the clickable squares.
+    let targets = [];
+    
+    // Global game state variables.
+    let isGameRunning = false;
+    let misClicks = 0;
+    let timerInterval;
+    let startTime;
 
-		// The framework requires a list of "targets" should be references to the elements corresponding to the squares. The elements have to be something that can have an eventListener attached. 
-		// The list can either be a 1D array (e.g. [svgElement, svgElement, svgElement etc]) 
-		// or an object, e.g. {1: svgElement, 2: svgElement, 3: svgElement etc})
-		let targets = [];
+    // Create an SVG canvas in the "main" div.
+    let svg = SVG().addTo('#main').size(canvasSize, canvasSize);
 
+    // Initialize the squares.
+    for (let i = 0; i < numberOfSquaresTall * numberOfSquaresWide; i++) {
+      // Calculate position.
+      let x = (i % numberOfSquaresWide) * (padding + buttonSize) + margin;
+      let y = Math.floor(i / numberOfSquaresTall) * (padding + buttonSize) + margin;
 
-		// This part shows how to set up clickable squares as svg elements. This is recommended, but you can use buttons/divs or canvases instead if you prefer, as long as the dimensions/positions are the same as this spec. 
-		// This code uses the svg.js library; documentation at: https://svgjs.dev/docs/3.0/
+      // Create and position each square.
+      let square = svg.rect(buttonSize, buttonSize);
+      square.move(x, y);
+      square.fill("#333");
+      targets[i] = square;
 
-		// Create an svg div that is the specified size, in the div with ID "main". (Centering it on the page is handled by CSS.)
-		let svg = SVG().addTo('#main').size(canvasSize, canvasSize);
+      // Attach click handler:
+      // If the game is running and the clicked square is active (hot pink "#f06"),
+      // then it’s a correct click (we simply turn it grey).
+      // Otherwise, count it as a mis-click.
+      square.click(() => {
+        if (!isGameRunning) return;
+        if (square.attr('fill') === "#f06") {
+          // Correct square clicked: mark it as processed.
+          square.fill("#333");
+        } else {
+          // Mis-click.
+          misClicks++;
+        }
+      });
+    }
 
-		// Initialize the squares.
-		for (let i=0; i<numberOfSquaresTall*numberOfSquaresWide; i++) {
-			// Calculate where this square should be:
-			let x = (i % numberOfSquaresWide) * (padding + buttonSize) + margin;
-			let y = Math.floor(i / numberOfSquaresTall) * (padding + buttonSize) + margin;
+    // Initialize the Judge (framework) with the number of tasks, targets, and team name.
+    const judge = new Judge(tasksLength, targets, "teamName");
 
-			// In svg.js, we make rectangles at whatever size we want
-			let square = svg.rect(buttonSize, buttonSize);
-			// ...and then we move them to where we want them. (This is different from Processing, where we make them "in the right place" to start with.)
-			square.move(x, y);
-			// and we can change the element's color:
-			square.fill("#333");
-			// (see the svg.js documentation for more information on colors, fill vs stroke, etc)
+    // When a new task is available, set the target square to hot pink.
+    judge.on("newTask", () => {
+      // Get the next square index.
+      let nextSquareIndex = judge.getNextTwoTasks()[0];
+      
+      // Reset all squares to grey.
+      for (let i = 0; i < numberOfSquaresTall * numberOfSquaresWide; i++) {
+        targets[i].fill("#333");
+      }
+      
+      // If there is a valid task, mark that square as active.
+      if (typeof nextSquareIndex !== "undefined") {
+        targets[nextSquareIndex].fill("#f06");
+      }
+    });
 
-			// And then we add this new square to the list of squares.
-			targets[i] = square;
-		}
+    // Get references to timer and final score display elements.
+    const timerDiv = document.getElementById("timer");
+    const finalScoreDiv = document.getElementById("finalScore");
 
+    // When the game starts.
+    judge.on("start", () => {
+      isGameRunning = true;
+      misClicks = 0; // reset mis-click counter
+      startTime = Date.now();
+      // Update timer every 50 ms with seconds and milliseconds.
+      timerInterval = setInterval(() => {
+        let elapsed = Date.now() - startTime;
+        let seconds = (elapsed / 1000).toFixed(2);
+        timerDiv.innerText = "Time: " + seconds + " s";
+      }, 50);
+    });
 
-		// =========== This part is required: =========== 
-		// Initialize the "judge" object with the number of tasks per trial, and the list of clickable targets.
-		const judge = new Judge(tasksLength, targets, "teamName");
-		// =========== /end required =========== 
+    // When the game stops (e.g., when the stop button is pressed).
+    judge.on("stop", () => {
+			if (!isGameRunning) return;
+      isGameRunning = false;
+      clearInterval(timerInterval);
+      let elapsed = Date.now() - startTime;
+      let seconds = elapsed / 1000;
+      let finalScore = seconds * (1 + (0.1 * misClicks));
+      finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+    });
 
-
-		// When the next task is available, fetch it.
-		// A "task" is simply the index of the next square that should be clicked.
-		judge.on("newTask", () => {
-			let nextTasks = judge.getNextTwoTasks();
-			// getNextTwoTasks() will get you the next two, as an array of length 2.
-			// Note that it's possible that one or both elements will be "undefined" (e.g. if there are no more tasks, or only one more).
-			console.log("The next square you should click is "+nextTasks[0]);
-		})
-
-		// Other available events you can assign handlers to:
-		// 		correctSquare: when the correct square is clicked
-		// 		wrongSquare: when the wrong square is clicked
-		// 		newTask: when a new task (the next square to click) is assigned
-		// 		testOver: when all tasks have been fulfilled
-		// 		reset: whenever judge.reset() is called
-		// 		start: whenever the start button is pressed
-		// 		stop: whenever the stop button is pressed
-
-		//  =========== !!! FOR EXAMPLE !!! =========== 
-		// Note that this version *overwrites* the "on" handler above at line 89.
-		judge.on("newTask", () => {
-			// get the next task
-			let nextSquareIndex = judge.getNextTwoTasks()[0];
-
-			// reset all the squares to grey
-			for (let i=0; i<numberOfSquaresTall*numberOfSquaresWide; i++) {
-				targets[i].fill("#333")
-			}
-
-			// if there is indeed a next task (not "undefined")
-			if (typeof nextSquareIndex !== "undefined") {
-				console.log("Next: "+nextSquareIndex);
-				// fill it with hot pink
-				targets[nextSquareIndex].fill("#f06");
-			}
-		})
-		
-	</script>
+    // Optionally, if the framework fires "testOver" when all tasks are done,
+    // also stop the timer and calculate the final score.
+    judge.on("testOver", () => {
+      isGameRunning = false;
+      clearInterval(timerInterval);
+      let elapsed = Date.now() - startTime;
+      let seconds = elapsed / 1000;
+      let finalScore = seconds * (1 + (0.1 * misClicks));
+      finalScoreDiv.innerText = "Score: " + finalScore.toFixed(3);
+    });
+  </script>
+  </body>
 </html>
