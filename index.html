@@ -84,21 +84,6 @@
       square.move(x, y);
       square.fill("#333");
       targets[i] = square;
-
-      // Attach click handler:
-      // If the game is running and the clicked square is active (hot pink "#f06"),
-      // then it’s a correct click (we simply turn it grey).
-      // Otherwise, count it as a mis-click.
-      square.click(() => {
-        if (!isGameRunning) return;
-        if (square.attr('fill') === "#f06") {
-          // Correct square clicked: mark it as processed.
-          square.fill("#333");
-        } else {
-          // Mis-click.
-          misClicks++;
-        }
-      });
     }
 
     // Initialize the Judge (framework) with the number of tasks, targets, and team name.
@@ -129,12 +114,34 @@
       isGameRunning = true;
       misClicks = 0; // reset mis-click counter
       startTime = Date.now();
+      finalScoreDiv.innerText = "Score:"
       // Update timer every 50 ms with seconds and milliseconds.
       timerInterval = setInterval(() => {
         let elapsed = Date.now() - startTime;
         let seconds = (elapsed / 1000).toFixed(2);
         timerDiv.innerText = "Time: " + seconds + " s";
       }, 50);
+    });
+
+    judge.on("newTask", () => {
+			// get the next task
+			let nextSquareIndex = judge.getNextTwoTasks()[0];
+
+			// reset all the squares to grey
+			for (let i=0; i<numberOfSquaresTall*numberOfSquaresWide; i++) {
+				targets[i].fill("#333")
+			}
+
+			// if there is indeed a next task (not "undefined")
+			if (typeof nextSquareIndex !== "undefined") {
+				console.log("Next: "+nextSquareIndex);
+				// fill it with hot pink
+				targets[nextSquareIndex].fill("#f06");
+			}
+		})
+
+    judge.on("wrongSquare", () => {
+      misClicks++;
     });
 
     // When the game stops (e.g., when the stop button is pressed).
