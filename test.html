@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Bakeoff 1</title>
+    <style type="text/css">
+      /* Basic page styling */
+      body {
+        height: 100vh;
+        width: 100vw;
+        margin: 0;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        /* Hide the default cursor */
+        cursor: none;
+      }
+      body.active {
+        border-left: 3px #f06 solid;
+      }
+      footer {
+        width: 100vw;
+        text-align: center;
+        position: absolute;
+        bottom: 0;
+        padding: 0.75em;
+        border-top: 1px #ddd solid;
+      }
+      svg {
+        border: 1px #ddd solid;
+      }
+      /* Header area: displays timer and final score */
+      #header {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+      }
+      #timer, #finalScore {
+        font-size: 24px;
+        margin-top: 5px;
+      }
+      /* Custom cursor style.
+         This element is moved by our animation loop. */
+      #customCursor {
+        position: fixed;
+        z-index: 1000;
+        width: 20px;
+        height: 20px;
+        background: red;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+    </style>
+    <!-- Recommended: svg.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>
+    <!-- Required: bakeoff framework (grid constants, Judge, etc.) -->
+    <script src="https://dhcs-s25-bakeoff1.glitch.me/framework.js"></script>
+  </head>
+  <body>
+    <div id="header">
+      <div id="timer">Time: 0.00 s</div>
+      <div id="finalScore">Score:</div>
+    </div>
+    <div id="main"></div>
+    <!-- Custom cursor element -->
+    <div id="customCursor"></div>
+    <script type="text/javascript">
+      /***********************
+       * Global Game Variables
+       ***********************/
+      const tasksLength = 10;
+      let targets = [];
+      let isGameRunning = false;
+      let misClicks = 0;
+      let timerInterval;
+      let startTime;
+      let activeSquare = null;
+      let lastSquare = null;
+      let connectingLine = null;
+      
+      /***********************
+       * Create the SVG Canvas
+       ***********************/
+      // canvasSize, numberOfSquaresWide, numberOfSquaresTall,
+      // buttonSize, padding, margin are provided by the framework.
+      let svg = SVG().addTo('#main').size(canvasSize, canvasSize);
+      
+      /***********************
+       * Initialize Grid Squares
+       ***********************/
+      for (let i = 0; i < numberOfSquaresWide * numberOfSquaresTall; i++) {
+        // Calculate x,y positions using framework-provided constants.
+        let x = (i % numberOfSquaresWide) * (padding + buttonSize) + margin;
+        let y = Math.floor(i / numberOfSquaresWide) * (padding + buttonSize) + margin;
+        let square = svg.rect(buttonSize, buttonSize);
+        square.move(x, y);
+        square.fill("#333");
+        targets[i] = square;
+      }
+      
+      /***********************
+       * Initialize the Judge (Framework)
+       ***********************/
+      const judge = new Judge(tasksLength, targets, "teamName");
+      
+      const timerDiv = document.getElementById("timer");
+      const finalScoreDiv = document.getElementById("finalScore");
+      const customCursor = document.getElementById("customCursor");
+      
+      /**********************************
+       * Custom Cursor Smoothing Logic
+       **********************************/
+      // We'll use a simple lerp (linear interpolation) for smooth movement.
+      let targetX = window.innerWidth / 2,
+          targetY = window.innerHeight / 2,
+          currentX = targetX,
+          currentY = targetY;
+      
+      // Mousemove handler: update target position.
+      document.addEventListener("mousemove", (e) => {
+        // If the game is running, check if the mouse is near any square center.
+        if (isGameRunning) {
+          let mouseX = e.clientX, mouseY = e.clientY;
+          let closest = null, closestDist = Infinity;
+          // Convert each square's center to viewport coordinates.
+          let svgRect = svg.node.getBoundingClientRect();
+          targets.forEach((sq) => {
+            let bbox = sq.bbox();
+            let centerX = svgRect.left + bbox.cx;
+            let centerY = svgRect.top + bbox.cy;
+            let d = Math.hypot(mouseX - centerX, mouseY - centerY);
+            if (d < closestDist) {
+              closestDist = d;
+              closest = { x: centerX, y: centerY };
+            }
+          });
+          // If the mouse is within 50px of a square center, set that as the target.
+          if (closest && closestDist < 50) {
+            targetX = closest.x;
+            targetY = closest.y;
+          } else {
+            targetX = mouseX;
+            targetY = mouseY;
+          }
+        } else {
+          // When game is not running, follow the mouse exactly.
+          targetX = e.clientX;
+          targetY = e.clientY;
+        }
+      });
+      
+      // Animation loop: smoothly move current cursor position toward target position.
+      function animateCursor() {
+        // Lerp factor controls the smoothing speed (0.15 is fairly quick).
+        currentX += (targetX - currentX) * 0.15;
+        currentY += (targetY - currentY) * 0.15;
+        customCursor.style.left = (currentX - 10) + "px";
+        customCursor.style.top = (currentY - 10) + "px";
+        requestAnimationFrame(animateCursor);
+      }
+      animateCursor();
+      
+      /**********************************
+       * Judge Event Handlers (Framework)
+       **********************************/
+      
+      // When the game starts.
+      judge.on("start", () => {
+        isGameRunning = true;
+        misClicks = 0; // reset mis-click counter
+        startTime = Date.now();
+        timerInterval = setInterval(() => {
+          let elapsed = Date.now() - startTime;
+          timerDiv.innerText = "Time: " + (elapsed / 1000).toFixed(2) + " s";
+        }, 50);
+      });
+      
+      // Reset: clear timer, reset squares, and trigger first target.
+      judge.on("reset", () => {
+        if (timerInterval) clearInterval(timerInterval);
+        isGameRunning = true;
+        misClicks = 0;
+        startTime = Date.now();
+        timerDiv.innerText = "Time: 0.00 s";
+        finalScoreDiv.innerText = "Score:";
+        targets.forEach(sq => sq.fill("#333"));
+        if (connectingLine) {
+          connectingLine.remove();
+          connectingLine = null;
+        }
+        lastSquare = null;
+        activeSquare = null;
+        // On reset, position the custom cursor at the center of the viewport.
+        targetX = window.innerWidth / 2;
+        targetY = window.innerHeight / 2;
+        currentX = targetX;
+        currentY = targetY;
+        customCursor.style.left = (currentX - 10) + "px";
+        customCursor.style.top = (currentY - 10) + "px";
+        if (judge.events["newTask"]) {
+          judge.events["newTask"]();
+        }
+      });
+      
+      // New Task: highlight the next square target.
+      judge.on("newTask", () => {
+        if (!isGameRunning) return;
+        // Remove any connecting line.
+        if (connectingLine) {
+          connectingLine.remove();
+          connectingLine = null;
+        }
+        let nextSquareIndex = judge.getNextTwoTasks()[0];
+        targets.forEach(sq => sq.fill("#333"));
+        if (typeof nextSquareIndex !== "undefined") {
+          // Optionally, you can draw a connecting line from the last target to the new one.
+          if (lastSquare) {
+            let oldBox = lastSquare.bbox();
+            let newBox = targets[nextSquareIndex].bbox();
+            connectingLine = svg.line(oldBox.cx, oldBox.cy, newBox.cx, newBox.cy)
+                                .stroke({ color: '#1F51FF', width: 6 })
+                                .attr({ "pointer-events": "none" });
+          }
+          // Highlight the new target square.
+          activeSquare = targets[nextSquareIndex];
+          activeSquare.fill("#f06");
+          lastSquare = activeSquare;
+        }
+      });
+      
+      // When the correct square is clicked.
+      judge.on("correctSquare", () => {
+        if (connectingLine) {
+          connectingLine.remove();
+          connectingLine = null;
+        }
+        if (activeSquare) {
+          activeSquare.fill("#333");
+        }
+      });
+      
+      // Wrong square: increment mis-click counter.
+      judge.on("wrongSquare", () => {
+        misClicks++;
+      });
+      
+      // Stop: end the game and display final score.
+      judge.on("stop", () => {
+        if (!isGameRunning) return;
+        isGameRunning = false;
+        clearInterval(timerInterval);
+        let elapsed = Date.now() - startTime;
+        let finalScore = (elapsed / 1000) * (1 + (0.1 * misClicks));
+        finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+      });
+      
+      // Test Over: same as stop.
+      judge.on("testOver", () => {
+        if (!isGameRunning) return;
+        isGameRunning = false;
+        clearInterval(timerInterval);
+        let elapsed = Date.now() - startTime;
+        let finalScore = (elapsed / 1000) * (1 + (0.1 * misClicks));
+        finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+      });
+    </script>
+  </body>
+</html>

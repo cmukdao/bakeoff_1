@@ -73,7 +73,7 @@
       // Calculate x,y based on the framework constants.
       let x = (i % numberOfSquaresWide) * (padding + buttonSize) + margin;
       let y = Math.floor(i / numberOfSquaresTall) * (padding + buttonSize) + margin;
-      let square = svg.rect(buttonSize * 1.5, buttonSize * 1.5);
+      let square = svg.rect(buttonSize, buttonSize);
       square.move(x, y);
       // Default color is grey.
       square.fill("#333");
