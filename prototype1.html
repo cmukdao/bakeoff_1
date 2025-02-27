@@ -101,7 +101,8 @@
 
     /* --- Event: reset --- 
          Called when a new game starts via the start button.
-         We reset game state and then manually trigger the first task. */
+         We reset game state and then manually trigger the first task.
+         (Also log the default info from the framework.) */
     judge.on("reset", () => {
       // Clear any running timer.
       if (timerInterval) clearInterval(timerInterval);
@@ -124,15 +125,18 @@
       if (judge.events["newTask"]) {
         judge.events["newTask"]();
       }
+      // Log the next squares as per the framework default.
+      console.log("Next squares:", judge.getNextTwoTasks());
     });
 
     /* --- Event: newTask ---
          When a new target is assigned, we highlight it and, if applicable,
          draw a connecting line from the previous target.
-         (If the game has been stopped, do nothing.) */
+         (If the game has been stopped, do nothing.)
+         We also log the next squares. */
     judge.on("newTask", () => {
       if (!isGameRunning) return;
-      // Remove any existing connecting line to ensure only one exists.
+      // Remove any existing connecting line.
       if (connectingLine) {
         connectingLine.remove();
         connectingLine = null;
@@ -156,12 +160,15 @@
         // Update lastSquare so that subsequent targets will connect from here.
         lastSquare = activeSquare;
       }
+      // Log the next squares.
+      console.log("Next squares:", judge.getNextTwoTasks());
     });
 
     /* --- Event: correctSquare ---
          When the correct (active) square is clicked, remove any connecting line
          and reset that square's color.
-         (The framework will then trigger newTask if there are remaining tasks.) */
+         (The framework will then trigger newTask if there are remaining tasks.)
+         (We log that the square was correctly hit.) */
     judge.on("correctSquare", () => {
       if (connectingLine) {
         connectingLine.remove();
@@ -170,17 +177,21 @@
       if (activeSquare) {
         activeSquare.fill("#333");
       }
+      console.log("Correct square clicked.");
     });
 
     /* --- Event: wrongSquare ---
-         Increment our mis-click counter when a wrong square is clicked. */
+         Increment our mis-click counter when a wrong square is clicked.
+         (Log the mis-click.) */
     judge.on("wrongSquare", () => {
       misClicks++;
+      console.log("Wrong square clicked. Total mis-clicks:", misClicks);
     });
 
     /* --- Event: stop ---
          When the game stops, if it is running, stop the timer and calculate the score.
-         Further stop presses or newTask events will have no effect. */
+         Further stop presses or newTask events will have no effect.
+         (Log the final score.) */
     judge.on("stop", () => {
       if (!isGameRunning) return;
       isGameRunning = false;
@@ -189,11 +200,12 @@
       let seconds = elapsed / 1000;
       let finalScore = seconds * (1 + (0.1 * misClicks));
       finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+      console.log("Game stopped. Final score:", finalScore.toFixed(2));
     });
 
     /* --- Event: testOver ---
          When all tasks are complete, stop the game and compute the final score.
-         (Same as stop.) */
+         (Same as stop; also log the result.) */
     judge.on("testOver", () => {
       if (!isGameRunning) return;
       isGameRunning = false;
@@ -202,6 +214,7 @@
       let seconds = elapsed / 1000;
       let finalScore = seconds * (1 + (0.1 * misClicks));
       finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+      console.log("Test over. Final score:", finalScore.toFixed(2));
     });
   </script>
   </body>
