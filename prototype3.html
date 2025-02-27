@@ -80,7 +80,6 @@
       
       // Flag for synthetic click
       let ignoreClick = false;
-      let pendingClick = false;
       // Record the time a click occurred.
       let clickTime = 0;
       
@@ -181,53 +180,53 @@
         }
       });
       
-      // On native click, simply record the click time and set pendingClick.
       document.addEventListener("click", (e) => {
-        if (ignoreClick) return;
-        clickTime = Date.now();
-        pendingClick = true;
-      });
+  // Only handle native (user-initiated) clicks.
+  if (!e.isTrusted || ignoreClick) {
+    ignoreClick = false;
+    return;
+  }  
+  const svgRect = svg.node.getBoundingClientRect();
+  
+  targets.forEach((sq) => {
+    const origX = sq.data('origX');
+    const origY = sq.data('origY');
+    const centerX = svgRect.left + origX + buttonSize / 2;
+    const centerY = svgRect.top + origY + buttonSize / 2;
+    
+    if (Math.hypot(cursorX - centerX, cursorY - centerY) < 1) {
+      console.log("Custom cursor is within 1px of square index", sq.data('index'), "; triggering synthetic click.");
+      sq.node.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        clientX: centerX,
+        clientY: centerY
+      }));
+    }
+  });
+  
+});
 
-      
-      // Animate the custom cursor moving in a straight line.
-      function animateCursor() {
-        const dx = targetX - cursorX;
-        const dy = targetY - cursorY;
-        if (Math.hypot(dx, dy) < 2) {
-          cursorX = targetX;
-          cursorY = targetY;
-          // Only trigger synthetic click if a click is pending.
-          if (isGameRunning && activeSquare && pendingClick) {
-            const svgRect = svg.node.getBoundingClientRect();
-            // Compute the active square's stored center from original data.
-            const origX = activeSquare.data('origX');
-            const origY = activeSquare.data('origY');
-            const storedCenterX = svgRect.left + origX + buttonSize / 2;
-            const storedCenterY = svgRect.top + origY + buttonSize / 2;
-            // Only fire synthetic click if at least 200ms have passed since click.
-              // Check if the custom cursor is within 5 pixels of the stored center.
-              if (Math.hypot(cursorX - storedCenterX, cursorY - storedCenterY) < 5) {
-                console.log("Custom cursor is within 5px of target; triggering synthetic click.");
-                activeSquare.node.dispatchEvent(new MouseEvent("click", {
-                  bubbles: true,
-                  clientX: storedCenterX,
-                  clientY: storedCenterY
-                }));
-                pendingClick = false;
-              }
-          }
-        } else {
-          cursorX += dx * 0.3;
-          cursorY += dy * 0.3;
-        }
-        updateCursorPosition(cursorX, cursorY);
-        requestAnimationFrame(animateCursor);
-      }
+
+
+function animateCursor() {
+  const dx = targetX - cursorX;
+  const dy = targetY - cursorY;
+  if (Math.hypot(dx, dy) < 1) {
+    cursorX = targetX;
+    cursorY = targetY;
+  } else {
+    cursorX += dx * 0.2;
+    cursorY += dy * 0.2;
+  }
+  updateCursorPosition(cursorX, cursorY);
+  requestAnimationFrame(animateCursor);
+}
+
       animateCursor();
       
       // Functions to enlarge and reset a square (update its attributes so the hit area increases).
       function enlargeSquare(sq) {
-        const newSize = buttonSize * 1.5;
+        const newSize = buttonSize * 2;
         const origX = sq.data('origX');
         const origY = sq.data('origY');
         const centerX = origX + buttonSize / 2;
@@ -258,7 +257,6 @@
           timerDiv.innerText = "Time: " + (elapsed / 1000).toFixed(2) + " s";
         }, 50);
         console.log("Game started.");
-        pendingClick = false;
         setTimeout(() => {
           if (judge.events["newTask"]) judge.events["newTask"]();
         }, 10);
@@ -282,7 +280,6 @@
         lastSquare = null;
         activeSquare = null;
         enlargedSquare = null;
-        pendingClick = false;
         console.log("Reset event triggered. Next squares:", judge.getNextTwoTasks());
         targetX = window.innerWidth / 2;
         targetY = window.innerHeight / 2;
@@ -304,9 +301,6 @@
           sq.fill("#ccc");
           resetSquareSize(sq);
         });
-        ignoreClick = true;
-        setTimeout(() => { ignoreClick = false; }, 0);
-        pendingClick = false;
         let nextSquareIndex = judge.getNextTwoTasks()[0];
         if (typeof nextSquareIndex !== "undefined") {
           if (lastSquare) {
@@ -334,13 +328,14 @@
           activeSquare.fill("#ccc");
           resetSquareSize(activeSquare);
         }
-        pendingClick = false;
+        const correctSound = new Audio("assets/correct.mp3");
+        correctSound.play();
+        ignoreClick = true;
         console.log("Correct square clicked.");
       });
       
       judge.on("wrongSquare", () => {
         misClicks++;
-        pendingClick = false;
         console.log("Wrong square clicked. Total mis-clicks:", misClicks);
       });
       

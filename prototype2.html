@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Bakeoff 1</title>
+    <style type="text/css">
+      body {
+        height: 100vh;
+        width: 100vw;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        /* Show system cursor for reference */
+        cursor: none;
+      }
+      body.active {
+        border-left: 3px #f06 solid;
+      }
+      footer {
+        width: 100vw;
+        text-align: center;
+        position: absolute;
+        bottom: 0;
+        padding: 0.75em;
+        border-top: 1px #ddd solid;
+      }
+      svg {
+        border: 1px #ddd solid;
+      }
+      #header {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+      }
+      #timer, #finalScore {
+        font-size: 24px;
+        margin-top: 5px;
+      }
+      #customCursor {
+        position: fixed;
+        z-index: 1000;
+        width: 20px;
+        height: 20px;
+        background: red;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+    </style>
+    <!-- svg.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>
+    <!-- Bakeoff framework -->
+    <script src="https://dhcs-s25-bakeoff1.glitch.me/framework.js"></script>
+  </head>
+  <body>
+    <div id="header">
+      <div id="timer">Time: 0.00 s</div>
+      <div id="finalScore">Score:</div>
+    </div>
+    <div id="main"></div>
+    <div id="customCursor"></div>
+    <script type="text/javascript">
+      /********************************
+       * Global Variables & Setup
+       ********************************/
+      const tasksLength = 10;
+      let targets = [];
+      let isGameRunning = false;
+      let misClicks = 0;
+      let timerInterval;
+      let startTime;
+      let activeSquare = null;
+      let lastSquare = null;
+      let connectingLine = null;
+      
+      // Use ignoreClick as a dictionary keyed by task number.
+      let ignoreClick = {};
+      // New task counter.
+      let currentTask = 0;
+      
+      // Record the time a click occurred.
+      let clickTime = 0;
+      
+      // Create SVG canvas (constants from framework: canvasSize, numberOfSquaresWide, numberOfSquaresTall, buttonSize, padding, margin)
+      let svg = SVG().addTo('#main').size(canvasSize, canvasSize);
+      
+      // Initialize squares with stored original data.
+      for (let i = 0; i < numberOfSquaresTall * numberOfSquaresWide; i++) {
+        let x = (i % numberOfSquaresWide) * (padding + buttonSize) + margin;
+        let y = Math.floor(i / numberOfSquaresWide) * (padding + buttonSize) + margin;
+        let square = svg.rect(buttonSize, buttonSize);
+        square.move(x, y);
+        square.fill("#ccc");
+        square.data('origX', x);
+        square.data('origY', y);
+        square.data('origSize', buttonSize);
+        square.data('index', i);
+        // Set transform-origin to center.
+        square.attr({ "transform-origin": "50% 50%" });
+        targets[i] = square;
+      }
+      
+      // Initialize Judge.
+      const judge = new Judge(tasksLength, targets, "teamName");
+      
+      const timerDiv = document.getElementById("timer");
+      const finalScoreDiv = document.getElementById("finalScore");
+      const customCursor = document.getElementById("customCursor");
+      
+      /********************************
+       * Custom Cursor Logic (No Enlargement)
+       ********************************/
+      let mouseX = window.innerWidth / 2,
+          mouseY = window.innerHeight / 2,
+          targetX = window.innerWidth / 2,
+          targetY = window.innerHeight / 2,
+          cursorX = window.innerWidth / 2,
+          cursorY = window.innerHeight / 2;
+      
+      function updateCursorPosition(x, y) {
+        customCursor.style.left = x + "px";
+        customCursor.style.top = y + "px";
+      }
+      updateCursorPosition(cursorX, cursorY);
+      
+      let lastMoveTime = 0;
+      document.addEventListener("mousemove", (e) => {
+        const now = Date.now();
+        if (now - lastMoveTime > 16) {
+          lastMoveTime = now;
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+          // Snap custom cursor target to the nearest square center if within 50px,
+          // otherwise follow the mouse.
+          if (isGameRunning) {
+            const svgRect = svg.node.getBoundingClientRect();
+            let closest = null;
+            let minDist = Infinity;
+            targets.forEach((sq) => {
+              const origX = sq.data('origX');
+              const origY = sq.data('origY');
+              const centerX = svgRect.left + origX + buttonSize / 2;
+              const centerY = svgRect.top + origY + buttonSize / 2;
+              const d = Math.hypot(mouseX - centerX, mouseY - centerY);
+              if (d < minDist) {
+                minDist = d;
+                closest = { x: centerX, y: centerY };
+              }
+            });
+            if (closest && minDist < 50) {
+              targetX = closest.x;
+              targetY = closest.y;
+            } else {
+              targetX = mouseX;
+              targetY = mouseY;
+            }
+          } else {
+            targetX = mouseX;
+            targetY = mouseY;
+          }
+        }
+      });
+      
+      document.addEventListener("click", (e) => {
+        // Only handle native (user-initiated) clicks.
+        if (!e.isTrusted || ignoreClick[currentTask]) {
+          // Reset ignoreClick for this task.
+          ignoreClick[currentTask] = false;
+          return;
+        }
+        console.log("Native click received.");
+      });
+      
+      function animateCursor() {
+        const dx = targetX - cursorX;
+        const dy = targetY - cursorY;
+        if (Math.hypot(dx, dy) < 1) {
+          cursorX = targetX;
+          cursorY = targetY;
+        } else {
+          cursorX += dx * 0.2;
+          cursorY += dy * 0.2;
+        }
+        updateCursorPosition(cursorX, cursorY);
+        requestAnimationFrame(animateCursor);
+      }
+      
+      animateCursor();
+      
+      /********************************
+       * Judge Event Handlers
+       ********************************/
+      judge.on("start", () => {
+        isGameRunning = true;
+        misClicks = 0;
+        currentTask = 0;
+        // Initialize ignoreClick dictionary for all tasks.
+        for (let i = 0; i < tasksLength; i++) {
+          ignoreClick[i] = false;
+        }
+        startTime = Date.now();
+        timerInterval = setInterval(() => {
+          let elapsed = Date.now() - startTime;
+          timerDiv.innerText = "Time: " + (elapsed / 1000).toFixed(2) + " s";
+        }, 50);
+        console.log("Game started.");
+        setTimeout(() => {
+          if (judge.events["newTask"]) judge.events["newTask"]();
+        }, 10);
+      });
+      
+      judge.on("reset", () => {
+        if (timerInterval) clearInterval(timerInterval);
+        isGameRunning = true;
+        misClicks = 0;
+        currentTask = 0;
+        for (let i = 0; i < tasksLength; i++) {
+          ignoreClick[i] = false;
+        }
+        startTime = Date.now();
+        timerDiv.innerText = "Time: 0.00 s";
+        finalScoreDiv.innerText = "Score:";
+        targets.forEach(sq => {
+          sq.fill("#ccc");
+        });
+        if (connectingLine) {
+          connectingLine.remove();
+          connectingLine = null;
+        }
+        lastSquare = null;
+        activeSquare = null;
+        console.log("Reset event triggered. Next squares:", judge.getNextTwoTasks());
+        targetX = window.innerWidth / 2;
+        targetY = window.innerHeight / 2;
+        cursorX = targetX;
+        cursorY = window.innerHeight / 2;
+        updateCursorPosition(cursorX, cursorY);
+        setTimeout(() => {
+          if (judge.events["newTask"]) judge.events["newTask"]();
+        }, 10);
+      });
+      
+      judge.on("newTask", () => {
+        if (!isGameRunning) return;
+        if (connectingLine) {
+          connectingLine.remove();
+          connectingLine = null;
+        }
+        targets.forEach(sq => {
+          sq.fill("#ccc");
+        });
+        // Tie ignoreClick to the current task.
+        ignoreClick[currentTask] = true;
+        setTimeout(() => { ignoreClick[currentTask] = false; }, 0);
+        
+        let nextSquareIndex = judge.getNextTwoTasks()[0];
+        if (typeof nextSquareIndex !== "undefined") {
+          if (lastSquare) {
+            let oldBox = lastSquare.bbox();
+            let newBox = targets[nextSquareIndex].bbox();
+            connectingLine = svg.line(oldBox.cx, oldBox.cy, newBox.cx, newBox.cy)
+                                .stroke({ color: '#1F51FF', width: 6 })
+                                .attr({ "pointer-events": "none" });
+          }
+          activeSquare = targets[nextSquareIndex];
+          activeSquare.fill("#f06");
+          activeSquare.front();
+          lastSquare = activeSquare;
+        }
+        console.log("New task event. Next squares:", judge.getNextTwoTasks());
+      });
+      
+      judge.on("correctSquare", () => {
+        if (connectingLine) {
+          connectingLine.remove();
+          connectingLine = null;
+        }
+        // When a correct square is registered, tie ignoreClick for this task.
+        ignoreClick[currentTask] = true;
+        console.log("Correct square clicked.");
+      });
+      
+      judge.on("wrongSquare", () => {
+        misClicks++;
+        console.log("Wrong square clicked. Total mis-clicks:", misClicks);
+      });
+      
+      judge.on("stop", () => {
+        if (!isGameRunning) return;
+        isGameRunning = false;
+        clearInterval(timerInterval);
+        targets.forEach(sq => { /* No resizing needed */ });
+        let elapsed = Date.now() - startTime;
+        let finalScore = (elapsed / 1000) * (1 + (0.1 * misClicks));
+        finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+        console.log("Game stopped. Final score:", finalScore.toFixed(2));
+      });
+      
+      judge.on("testOver", () => {
+        if (!isGameRunning) return;
+        isGameRunning = false;
+        clearInterval(timerInterval);
+        targets.forEach(sq => { /* No resizing needed */ });
+        let elapsed = Date.now() - startTime;
+        let finalScore = (elapsed / 1000) * (1 + (0.1 * misClicks));
+        finalScoreDiv.innerText = "Score: " + finalScore.toFixed(2);
+        console.log("Test over. Final score:", finalScore.toFixed(2));
+      });
+    </script>
+  </body>
+</html>
