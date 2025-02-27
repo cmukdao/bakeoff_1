@@ -211,7 +211,7 @@
 function animateCursor() {
   const dx = targetX - cursorX;
   const dy = targetY - cursorY;
-  if (Math.hypot(dx, dy) < 2) {
+  if (Math.hypot(dx, dy) < 1) {
     cursorX = targetX;
     cursorY = targetY;
   } else {
